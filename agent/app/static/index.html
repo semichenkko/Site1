@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Agent</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1d1d1b; --muted:#6b6b66; --accent:#c96442; --me:#efe9e3; --border:#e2e0db; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1b1b19; --card:#252523; --text:#ecebe7; --muted:#a09f99; --accent:#d97757; --me:#33302c; --border:#3a3936; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); height:100dvh; display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; }
+  header h1 { font-size:17px; margin:0; flex:1; }
+  #log { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; max-width:860px; width:100%; margin:0 auto; }
+  .msg { padding:10px 14px; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; max-width:90%; }
+  .me { background:var(--me); align-self:flex-end; }
+  .bot { background:var(--card); border:1px solid var(--border); align-self:flex-start; }
+  .sys { color:var(--muted); font-size:14px; align-self:center; }
+  form { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); max-width:860px; width:100%; margin:0 auto; }
+  textarea, input { flex:1; font:inherit; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); resize:none; }
+  button { font:inherit; padding:8px 14px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
+  button:disabled { opacity:.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Claude Agent</h1>
+  <button class="ghost" id="reset" type="button">Новый чат</button>
+  <button class="ghost" id="logout" type="button">Выйти</button>
+</header>
+<div id="log"></div>
+<form id="form">
+  <textarea id="input" rows="2" placeholder="Напишите задачу… (Enter — отправить, Shift+Enter — новая строка)"></textarea>
+  <button id="send">Отправить</button>
+</form>
+<script>
+  const log = document.getElementById('log');
+  const input = document.getElementById('input');
+  const send = document.getElementById('send');
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+  let session = store.get('session') || crypto.randomUUID();
+  store.set('session', session);
+
+  function add(text, cls) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    return d;
+  }
+  function password() {
+    let p = store.get('pw');
+    if (!p) { p = prompt('Пароль (WEB_PASSWORD из .env):') || ''; store.set('pw', p); }
+    return p;
+  }
+  async function api(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Password': password() },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401) store.del('pw');
+    if (!r.ok) throw new Error(data.detail || ('HTTP ' + r.status));
+    return data;
+  }
+
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    add(text, 'me');
+    const wait = add('Думаю…', 'sys');
+    send.disabled = true;
+    try {
+      const { reply } = await api('/api/chat', { session_id: session, message: text });
+      wait.remove();
+      add(reply, 'bot');
+    } catch (err) {
+      wait.textContent = 'Ошибка: ' + err.message;
+    } finally {
+      send.disabled = false;
+      input.focus();
+    }
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('form').requestSubmit(); }
+  });
+  document.getElementById('reset').onclick = async () => {
+    try { await api('/api/reset', { session_id: session }); } catch {}
+    session = crypto.randomUUID(); store.set('session', session);
+    log.innerHTML = ''; add('Новый чат', 'sys');
+  };
+  document.getElementById('logout').onclick = () => { store.del('pw'); add('Пароль сброшен', 'sys'); };
+  add('Привет! Я агент на Claude. Чем помочь?', 'bot');
+</script>
+</body>
+</html>
