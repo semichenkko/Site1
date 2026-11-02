@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    command: python -m app.web
+    env_file: .env
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - agent-data:/data
+    restart: unless-stopped
+
+  telegram:
+    build: .
+    command: python -m app.telegram_bot
+    env_file: .env
+    volumes:
+      - agent-data:/data
+    restart: unless-stopped
+    profiles: ["telegram"]
+
+volumes:
+  agent-data:
