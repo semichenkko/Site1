@@ -25,6 +25,7 @@ const server = http.createServer((req, res) => {
   const p = await page.evaluate(() => window.__path);
   if (p) fs.writeFileSync(path.join(root, 'path.json'), JSON.stringify(p));
   console.log('ready', await page.evaluate(() => window.__done), p && { total: p.total, v: p.v });
+  if (process.env.WARM) for (let i = Math.max(0, +from - +process.env.WARM); i < +from; i++) await page.evaluate((i) => window.renderFrame(i, true), i);
   const t0 = Date.now();
   const list = process.env.FRAMES ? process.env.FRAMES.split(',').map(Number) : Array.from({ length: +to - +from }, (_, k) => +from + k);
   for (const i of list) {
